@@ -274,6 +274,116 @@ std::ostream& operator<<(std::ostream& out, const VoteResponse& obj) {
 }
 
 
+LogEntry::~LogEntry() throw() {
+}
+
+
+void LogEntry::__set_number(const int32_t val) {
+  this->number = val;
+}
+
+void LogEntry::__set_term(const int32_t val) {
+  this->term = val;
+}
+
+const char* LogEntry::ascii_fingerprint = "989D1F1AE8D148D5E2119FFEC4BBBEE3";
+const uint8_t LogEntry::binary_fingerprint[16] = {0x98,0x9D,0x1F,0x1A,0xE8,0xD1,0x48,0xD5,0xE2,0x11,0x9F,0xFE,0xC4,0xBB,0xBE,0xE3};
+
+uint32_t LogEntry::read(::apache::thrift::protocol::TProtocol* iprot) {
+
+  uint32_t xfer = 0;
+  std::string fname;
+  ::apache::thrift::protocol::TType ftype;
+  int16_t fid;
+
+  xfer += iprot->readStructBegin(fname);
+
+  using ::apache::thrift::protocol::TProtocolException;
+
+
+  while (true)
+  {
+    xfer += iprot->readFieldBegin(fname, ftype, fid);
+    if (ftype == ::apache::thrift::protocol::T_STOP) {
+      break;
+    }
+    switch (fid)
+    {
+      case 1:
+        if (ftype == ::apache::thrift::protocol::T_I32) {
+          xfer += iprot->readI32(this->number);
+          this->__isset.number = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      case 2:
+        if (ftype == ::apache::thrift::protocol::T_I32) {
+          xfer += iprot->readI32(this->term);
+          this->__isset.term = true;
+        } else {
+          xfer += iprot->skip(ftype);
+        }
+        break;
+      default:
+        xfer += iprot->skip(ftype);
+        break;
+    }
+    xfer += iprot->readFieldEnd();
+  }
+
+  xfer += iprot->readStructEnd();
+
+  return xfer;
+}
+
+uint32_t LogEntry::write(::apache::thrift::protocol::TProtocol* oprot) const {
+  uint32_t xfer = 0;
+  oprot->incrementRecursionDepth();
+  xfer += oprot->writeStructBegin("LogEntry");
+
+  xfer += oprot->writeFieldBegin("number", ::apache::thrift::protocol::T_I32, 1);
+  xfer += oprot->writeI32(this->number);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldBegin("term", ::apache::thrift::protocol::T_I32, 2);
+  xfer += oprot->writeI32(this->term);
+  xfer += oprot->writeFieldEnd();
+
+  xfer += oprot->writeFieldStop();
+  xfer += oprot->writeStructEnd();
+  oprot->decrementRecursionDepth();
+  return xfer;
+}
+
+void swap(LogEntry &a, LogEntry &b) {
+  using ::std::swap;
+  swap(a.number, b.number);
+  swap(a.term, b.term);
+  swap(a.__isset, b.__isset);
+}
+
+LogEntry::LogEntry(const LogEntry& other4) {
+  number = other4.number;
+  term = other4.term;
+  __isset = other4.__isset;
+}
+LogEntry& LogEntry::operator=(const LogEntry& other5) {
+  number = other5.number;
+  term = other5.term;
+  __isset = other5.__isset;
+  return *this;
+}
+std::ostream& operator<<(std::ostream& out, const LogEntry& obj) {
+  using apache::thrift::to_string;
+  out << "LogEntry(";
+  out << "number=" << to_string(obj.number);
+  out << ", " << "term=" << to_string(obj.term);
+  out << ")";
+  return out;
+}
+
+
 AppendEntries::~AppendEntries() throw() {
 }
 
@@ -294,7 +404,7 @@ void AppendEntries::__set_prevLogTerm(const int32_t val) {
   this->prevLogTerm = val;
 }
 
-void AppendEntries::__set_entries(const std::vector<int32_t> & val) {
+void AppendEntries::__set_entries(const std::vector<LogEntry> & val) {
   this->entries = val;
 }
 
@@ -302,8 +412,8 @@ void AppendEntries::__set_leaderCommit(const int32_t val) {
   this->leaderCommit = val;
 }
 
-const char* AppendEntries::ascii_fingerprint = "BC8E1F72C3EA586FC235843B2F052EA6";
-const uint8_t AppendEntries::binary_fingerprint[16] = {0xBC,0x8E,0x1F,0x72,0xC3,0xEA,0x58,0x6F,0xC2,0x35,0x84,0x3B,0x2F,0x05,0x2E,0xA6};
+const char* AppendEntries::ascii_fingerprint = "9C0FF7CFB3FE157E2B16105619A27992";
+const uint8_t AppendEntries::binary_fingerprint[16] = {0x9C,0x0F,0xF7,0xCF,0xB3,0xFE,0x15,0x7E,0x2B,0x16,0x10,0x56,0x19,0xA2,0x79,0x92};
 
 uint32_t AppendEntries::read(::apache::thrift::protocol::TProtocol* iprot) {
 
@@ -361,14 +471,14 @@ uint32_t AppendEntries::read(::apache::thrift::protocol::TProtocol* iprot) {
         if (ftype == ::apache::thrift::protocol::T_LIST) {
           {
             this->entries.clear();
-            uint32_t _size4;
-            ::apache::thrift::protocol::TType _etype7;
-            xfer += iprot->readListBegin(_etype7, _size4);
-            this->entries.resize(_size4);
-            uint32_t _i8;
-            for (_i8 = 0; _i8 < _size4; ++_i8)
+            uint32_t _size6;
+            ::apache::thrift::protocol::TType _etype9;
+            xfer += iprot->readListBegin(_etype9, _size6);
+            this->entries.resize(_size6);
+            uint32_t _i10;
+            for (_i10 = 0; _i10 < _size6; ++_i10)
             {
-              xfer += iprot->readI32(this->entries[_i8]);
+              xfer += this->entries[_i10].read(iprot);
             }
             xfer += iprot->readListEnd();
           }
@@ -420,11 +530,11 @@ uint32_t AppendEntries::write(::apache::thrift::protocol::TProtocol* oprot) cons
 
   xfer += oprot->writeFieldBegin("entries", ::apache::thrift::protocol::T_LIST, 5);
   {
-    xfer += oprot->writeListBegin(::apache::thrift::protocol::T_I32, static_cast<uint32_t>(this->entries.size()));
-    std::vector<int32_t> ::const_iterator _iter9;
-    for (_iter9 = this->entries.begin(); _iter9 != this->entries.end(); ++_iter9)
+    xfer += oprot->writeListBegin(::apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->entries.size()));
+    std::vector<LogEntry> ::const_iterator _iter11;
+    for (_iter11 = this->entries.begin(); _iter11 != this->entries.end(); ++_iter11)
     {
-      xfer += oprot->writeI32((*_iter9));
+      xfer += (*_iter11).write(oprot);
     }
     xfer += oprot->writeListEnd();
   }
@@ -451,23 +561,23 @@ void swap(AppendEntries &a, AppendEntries &b) {
   swap(a.__isset, b.__isset);
 }
 
-AppendEntries::AppendEntries(const AppendEntries& other10) {
-  term = other10.term;
-  leaderID = other10.leaderID;
-  prevLogIndex = other10.prevLogIndex;
-  prevLogTerm = other10.prevLogTerm;
-  entries = other10.entries;
-  leaderCommit = other10.leaderCommit;
-  __isset = other10.__isset;
+AppendEntries::AppendEntries(const AppendEntries& other12) {
+  term = other12.term;
+  leaderID = other12.leaderID;
+  prevLogIndex = other12.prevLogIndex;
+  prevLogTerm = other12.prevLogTerm;
+  entries = other12.entries;
+  leaderCommit = other12.leaderCommit;
+  __isset = other12.__isset;
 }
-AppendEntries& AppendEntries::operator=(const AppendEntries& other11) {
-  term = other11.term;
-  leaderID = other11.leaderID;
-  prevLogIndex = other11.prevLogIndex;
-  prevLogTerm = other11.prevLogTerm;
-  entries = other11.entries;
-  leaderCommit = other11.leaderCommit;
-  __isset = other11.__isset;
+AppendEntries& AppendEntries::operator=(const AppendEntries& other13) {
+  term = other13.term;
+  leaderID = other13.leaderID;
+  prevLogIndex = other13.prevLogIndex;
+  prevLogTerm = other13.prevLogTerm;
+  entries = other13.entries;
+  leaderCommit = other13.leaderCommit;
+  __isset = other13.__isset;
   return *this;
 }
 std::ostream& operator<<(std::ostream& out, const AppendEntries& obj) {
@@ -573,15 +683,15 @@ void swap(AppendResponse &a, AppendResponse &b) {
   swap(a.__isset, b.__isset);
 }
 
-AppendResponse::AppendResponse(const AppendResponse& other12) {
-  term = other12.term;
-  success = other12.success;
-  __isset = other12.__isset;
+AppendResponse::AppendResponse(const AppendResponse& other14) {
+  term = other14.term;
+  success = other14.success;
+  __isset = other14.__isset;
 }
-AppendResponse& AppendResponse::operator=(const AppendResponse& other13) {
-  term = other13.term;
-  success = other13.success;
-  __isset = other13.__isset;
+AppendResponse& AppendResponse::operator=(const AppendResponse& other15) {
+  term = other15.term;
+  success = other15.success;
+  __isset = other15.__isset;
   return *this;
 }
 std::ostream& operator<<(std::ostream& out, const AppendResponse& obj) {

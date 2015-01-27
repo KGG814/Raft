@@ -23,6 +23,8 @@ class RequestVote;
 
 class VoteResponse;
 
+class LogEntry;
+
 class AppendEntries;
 
 class AppendResponse;
@@ -137,6 +139,55 @@ class VoteResponse {
 
 void swap(VoteResponse &a, VoteResponse &b);
 
+typedef struct _LogEntry__isset {
+  _LogEntry__isset() : number(false), term(false) {}
+  bool number :1;
+  bool term :1;
+} _LogEntry__isset;
+
+class LogEntry {
+ public:
+
+  static const char* ascii_fingerprint; // = "989D1F1AE8D148D5E2119FFEC4BBBEE3";
+  static const uint8_t binary_fingerprint[16]; // = {0x98,0x9D,0x1F,0x1A,0xE8,0xD1,0x48,0xD5,0xE2,0x11,0x9F,0xFE,0xC4,0xBB,0xBE,0xE3};
+
+  LogEntry(const LogEntry&);
+  LogEntry& operator=(const LogEntry&);
+  LogEntry() : number(0), term(0) {
+  }
+
+  virtual ~LogEntry() throw();
+  int32_t number;
+  int32_t term;
+
+  _LogEntry__isset __isset;
+
+  void __set_number(const int32_t val);
+
+  void __set_term(const int32_t val);
+
+  bool operator == (const LogEntry & rhs) const
+  {
+    if (!(number == rhs.number))
+      return false;
+    if (!(term == rhs.term))
+      return false;
+    return true;
+  }
+  bool operator != (const LogEntry &rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const LogEntry & ) const;
+
+  uint32_t read(::apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::apache::thrift::protocol::TProtocol* oprot) const;
+
+  friend std::ostream& operator<<(std::ostream& out, const LogEntry& obj);
+};
+
+void swap(LogEntry &a, LogEntry &b);
+
 typedef struct _AppendEntries__isset {
   _AppendEntries__isset() : term(false), leaderID(false), prevLogIndex(false), prevLogTerm(false), entries(false), leaderCommit(false) {}
   bool term :1;
@@ -150,8 +201,8 @@ typedef struct _AppendEntries__isset {
 class AppendEntries {
  public:
 
-  static const char* ascii_fingerprint; // = "BC8E1F72C3EA586FC235843B2F052EA6";
-  static const uint8_t binary_fingerprint[16]; // = {0xBC,0x8E,0x1F,0x72,0xC3,0xEA,0x58,0x6F,0xC2,0x35,0x84,0x3B,0x2F,0x05,0x2E,0xA6};
+  static const char* ascii_fingerprint; // = "9C0FF7CFB3FE157E2B16105619A27992";
+  static const uint8_t binary_fingerprint[16]; // = {0x9C,0x0F,0xF7,0xCF,0xB3,0xFE,0x15,0x7E,0x2B,0x16,0x10,0x56,0x19,0xA2,0x79,0x92};
 
   AppendEntries(const AppendEntries&);
   AppendEntries& operator=(const AppendEntries&);
@@ -163,7 +214,7 @@ class AppendEntries {
   int32_t leaderID;
   int32_t prevLogIndex;
   int32_t prevLogTerm;
-  std::vector<int32_t>  entries;
+  std::vector<LogEntry>  entries;
   int32_t leaderCommit;
 
   _AppendEntries__isset __isset;
@@ -176,7 +227,7 @@ class AppendEntries {
 
   void __set_prevLogTerm(const int32_t val);
 
-  void __set_entries(const std::vector<int32_t> & val);
+  void __set_entries(const std::vector<LogEntry> & val);
 
   void __set_leaderCommit(const int32_t val);
 

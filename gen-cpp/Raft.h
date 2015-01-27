@@ -184,8 +184,8 @@ typedef struct _Raft_AppendEntriesRPC_args__isset {
 class Raft_AppendEntriesRPC_args {
  public:
 
-  static const char* ascii_fingerprint; // = "5AA8887FD582FF2AE691974C49553CDB";
-  static const uint8_t binary_fingerprint[16]; // = {0x5A,0xA8,0x88,0x7F,0xD5,0x82,0xFF,0x2A,0xE6,0x91,0x97,0x4C,0x49,0x55,0x3C,0xDB};
+  static const char* ascii_fingerprint; // = "081224816F45AC953E6344B7AC98D1A8";
+  static const uint8_t binary_fingerprint[16]; // = {0x08,0x12,0x24,0x81,0x6F,0x45,0xAC,0x95,0x3E,0x63,0x44,0xB7,0xAC,0x98,0xD1,0xA8};
 
   Raft_AppendEntriesRPC_args(const Raft_AppendEntriesRPC_args&);
   Raft_AppendEntriesRPC_args& operator=(const Raft_AppendEntriesRPC_args&);
@@ -221,8 +221,8 @@ class Raft_AppendEntriesRPC_args {
 class Raft_AppendEntriesRPC_pargs {
  public:
 
-  static const char* ascii_fingerprint; // = "5AA8887FD582FF2AE691974C49553CDB";
-  static const uint8_t binary_fingerprint[16]; // = {0x5A,0xA8,0x88,0x7F,0xD5,0x82,0xFF,0x2A,0xE6,0x91,0x97,0x4C,0x49,0x55,0x3C,0xDB};
+  static const char* ascii_fingerprint; // = "081224816F45AC953E6344B7AC98D1A8";
+  static const uint8_t binary_fingerprint[16]; // = {0x08,0x12,0x24,0x81,0x6F,0x45,0xAC,0x95,0x3E,0x63,0x44,0xB7,0xAC,0x98,0xD1,0xA8};
 
 
   virtual ~Raft_AppendEntriesRPC_pargs() throw();
