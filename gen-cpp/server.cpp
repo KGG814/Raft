@@ -2,10 +2,15 @@
 // You should copy it to another filename to avoid overwriting it.
 
 #include "Raft.h"
+#include <boost/thread/thread.hpp>
 #include <thrift/protocol/TBinaryProtocol.h>
 #include <thrift/server/TSimpleServer.h>
 #include <thrift/transport/TServerSocket.h>
 #include <thrift/transport/TBufferTransports.h>
+#include <thread>
+#include <chrono>
+#include <ctime>
+#include <boost/thread.hpp>
 
 using namespace ::apache::thrift;
 using namespace ::apache::thrift::protocol;
@@ -14,50 +19,101 @@ using namespace ::apache::thrift::server;
 
 using boost::shared_ptr;
 
+#define LOCAL 192.168.1.1
+#define TIMEOUT 1
+
 #define NONE 0
+
 #define MAJ 3
 #define NUM_SERVERS 5
+
+#define PORT 1
+#define ID 2
+#define MIN_ARGS 3
+
+#define FOLLOWER 0
+#define CANDIDATE 1
+#define LEADER 2
+
+void timer (void);
+
+std::chrono::system_clock::time_point msgTime;
+boost::mutex voteLock;
+boost::thread msgTimer;
+int port;
+
+// Raft server state
+
+int id;                             // Unique ID for node
+int state;                          // What state node is in
+int numVotes;                       // Votes node has in current term
+
+// Persistent     
+int currentTerm;                    // Term node is in
+int votedFor;                       // Who it voted for in current term
+std::vector<LogEntry> raftLog;
+
+// Volatile
+int commitIndex;
+int lastApplied;
+
+// Leader only
+int nextIndex [5];
+int matchIndex [5];
+
 
 class RaftHandler : virtual public RaftIf {
  public:
 
-  // Raft server state
-
-  // Persistent
-  int currentTerm;
-  int votedFor;
-  std::vector<LogEntry> log;
-
-  // Volatile
-  int commitIndex;
-  int lastIndex;
-
-  // Leader only
-  int nextIndex [5];
-  int matchIndex [5];
-
   RaftHandler() {
     // State initialization
     currentTerm = 0;
+    state = FOLLOWER;
     votedFor = NONE;
     commitIndex = 0;
     lastApplied = 0;
+    numVotes = 0;
+    msgTime = std::chrono::system_clock::now();
   }
 
   bool RequestVoteRPC(const RequestVote& vote) {
-    // Your implementation goes here
     printf("RequestVoteRPC\n");
+    if (state = LEADER) {
+      // Leader handling, probably ignore
+    } else if (state = FOLLOWER) {
+      // Check terms and send vote
+    } else if (state = CANDIDATE) {
+      // Do nothing
+    }
   }
 
   bool AppendEntriesRPC(const AppendEntries& append) {
-    // Your implementation goes here
     printf("AppendEntriesRPC\n");
+    if (state = LEADER) {
+      // Leader handling
+    } else if (state = FOLLOWER) {
+      // Check terms and send vote
+    } else if (state = CANDIDATE) {
+      // If term received is >= currentTerm, return to follower state
+      state = FOLLOWER;
+      msgTimer.interrupt();
+      // If not, continue in candidate
+    }
   }
 
 };
 
 int main(int argc, char **argv) {
-  int port = 9090;
+  if (argc >= MIN_ARGS) {
+    // Server Information
+    port = atoi(argv[PORT]);
+    id = atoi(argv[ID]);
+  } else {
+    std::cout << "Usage: ./server [port] [id]" << std::endl;
+    return 1;
+  }
+  
+  //TODO get servers and put in list
   shared_ptr<RaftHandler> handler(new RaftHandler());
   shared_ptr<TProcessor> processor(new RaftProcessor(handler));
   shared_ptr<TServerTransport> serverTransport(new TServerSocket(port));
@@ -65,7 +121,68 @@ int main(int argc, char **argv) {
   shared_ptr<TProtocolFactory> protocolFactory(new TBinaryProtocolFactory());
 
   TSimpleServer server(processor, serverTransport, transportFactory, protocolFactory);
+  boost::thread msgTimer (timer);
   server.serve();
   return 0;
 }
 
+void timer (void) {
+  boost::condition_variable cond;
+  std::string server;
+  while (1) {
+    if (std::chrono::system_clock::now() >= msgTime + std::chrono::seconds(TIMEOUT)
+        && state == FOLLOWER) {
+      
+      // Candidate handling
+      std::cout << "Candidate mode" << std::endl;
+      state = CANDIDATE;
+      currentTerm++;
+      // Vote for self
+      votedFor = id;
+      numVotes++;
+
+      // Issue request vote RPCs (new threads)
+      for (int i = 0; i < NUM_SERVERS; i++) {
+    	  if (port != serverList[i]) {
+          //TODO Make thread array
+          boost::thread voteThreads[i] (requestVote, serverList[i]);
+        }
+      }
+      // Wait for response
+      boost::unique_lock<boost::mutex> lock(voteLock);
+      try {
+        while (numVotes < MAJ) {
+          cond.wait(lock);
+        }
+      } catch (boost::thread_interrupted&) {
+        // If valid AppendEntries received, thread will be reset
+        std::cout << "Resetting timer" << std::endl;
+        msgTime = std::chrono::system_clock::now();
+        continue;        
+      } 
+ 
+      // If successful, leader     
+    }
+  }
+}
+
+VoteResponse requestVote (int sendPort) {
+  //TODO Store response in array
+  // Create the socket, transport and protocol structures for thrift.
+  boost::shared_ptr<TTransport> socket(new TSocket(LOCAL, port));
+  boost::shared_ptr<TTransport> transport(new TBufferedTransport(socket));
+  boost::shared_ptr<TProtocol> protocol(new TBinaryProtocol(transport));
+
+  // The thrift client
+  Raft client(protocol);
+
+  try {
+    transport->open();
+    // TODO Fill in request
+    client.RequestVoteRPC();
+    transport->close();
+
+  } catch (TException &tx) {
+    std::cout << "Connection Failed" << std::endl;
+  }
+}
