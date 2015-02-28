@@ -15,8 +15,8 @@
 class RaftIf {
  public:
   virtual ~RaftIf() {}
-  virtual bool RequestVoteRPC(const RequestVote& vote) = 0;
-  virtual bool AppendEntriesRPC(const AppendEntries& append) = 0;
+  virtual void RequestVoteRPC(VoteResponse& _return, const RequestVote& vote) = 0;
+  virtual void AppendEntriesRPC(AppendResponse& _return, const AppendEntries& append) = 0;
 };
 
 class RaftIfFactory {
@@ -46,13 +46,11 @@ class RaftIfSingletonFactory : virtual public RaftIfFactory {
 class RaftNull : virtual public RaftIf {
  public:
   virtual ~RaftNull() {}
-  bool RequestVoteRPC(const RequestVote& /* vote */) {
-    bool _return = false;
-    return _return;
+  void RequestVoteRPC(VoteResponse& /* _return */, const RequestVote& /* vote */) {
+    return;
   }
-  bool AppendEntriesRPC(const AppendEntries& /* append */) {
-    bool _return = false;
-    return _return;
+  void AppendEntriesRPC(AppendResponse& /* _return */, const AppendEntries& /* append */) {
+    return;
   }
 };
 
@@ -121,20 +119,20 @@ typedef struct _Raft_RequestVoteRPC_result__isset {
 class Raft_RequestVoteRPC_result {
  public:
 
-  static const char* ascii_fingerprint; // = "D9D3B4421B1F23CB4063C80B484E7909";
-  static const uint8_t binary_fingerprint[16]; // = {0xD9,0xD3,0xB4,0x42,0x1B,0x1F,0x23,0xCB,0x40,0x63,0xC8,0x0B,0x48,0x4E,0x79,0x09};
+  static const char* ascii_fingerprint; // = "49E764C8B69512E0ECAFC9B0C79DBFA8";
+  static const uint8_t binary_fingerprint[16]; // = {0x49,0xE7,0x64,0xC8,0xB6,0x95,0x12,0xE0,0xEC,0xAF,0xC9,0xB0,0xC7,0x9D,0xBF,0xA8};
 
   Raft_RequestVoteRPC_result(const Raft_RequestVoteRPC_result&);
   Raft_RequestVoteRPC_result& operator=(const Raft_RequestVoteRPC_result&);
-  Raft_RequestVoteRPC_result() : success(0) {
+  Raft_RequestVoteRPC_result() {
   }
 
   virtual ~Raft_RequestVoteRPC_result() throw();
-  bool success;
+  VoteResponse success;
 
   _Raft_RequestVoteRPC_result__isset __isset;
 
-  void __set_success(const bool val);
+  void __set_success(const VoteResponse& val);
 
   bool operator == (const Raft_RequestVoteRPC_result & rhs) const
   {
@@ -162,12 +160,12 @@ typedef struct _Raft_RequestVoteRPC_presult__isset {
 class Raft_RequestVoteRPC_presult {
  public:
 
-  static const char* ascii_fingerprint; // = "D9D3B4421B1F23CB4063C80B484E7909";
-  static const uint8_t binary_fingerprint[16]; // = {0xD9,0xD3,0xB4,0x42,0x1B,0x1F,0x23,0xCB,0x40,0x63,0xC8,0x0B,0x48,0x4E,0x79,0x09};
+  static const char* ascii_fingerprint; // = "49E764C8B69512E0ECAFC9B0C79DBFA8";
+  static const uint8_t binary_fingerprint[16]; // = {0x49,0xE7,0x64,0xC8,0xB6,0x95,0x12,0xE0,0xEC,0xAF,0xC9,0xB0,0xC7,0x9D,0xBF,0xA8};
 
 
   virtual ~Raft_RequestVoteRPC_presult() throw();
-  bool* success;
+  VoteResponse* success;
 
   _Raft_RequestVoteRPC_presult__isset __isset;
 
@@ -241,20 +239,20 @@ typedef struct _Raft_AppendEntriesRPC_result__isset {
 class Raft_AppendEntriesRPC_result {
  public:
 
-  static const char* ascii_fingerprint; // = "D9D3B4421B1F23CB4063C80B484E7909";
-  static const uint8_t binary_fingerprint[16]; // = {0xD9,0xD3,0xB4,0x42,0x1B,0x1F,0x23,0xCB,0x40,0x63,0xC8,0x0B,0x48,0x4E,0x79,0x09};
+  static const char* ascii_fingerprint; // = "49E764C8B69512E0ECAFC9B0C79DBFA8";
+  static const uint8_t binary_fingerprint[16]; // = {0x49,0xE7,0x64,0xC8,0xB6,0x95,0x12,0xE0,0xEC,0xAF,0xC9,0xB0,0xC7,0x9D,0xBF,0xA8};
 
   Raft_AppendEntriesRPC_result(const Raft_AppendEntriesRPC_result&);
   Raft_AppendEntriesRPC_result& operator=(const Raft_AppendEntriesRPC_result&);
-  Raft_AppendEntriesRPC_result() : success(0) {
+  Raft_AppendEntriesRPC_result() {
   }
 
   virtual ~Raft_AppendEntriesRPC_result() throw();
-  bool success;
+  AppendResponse success;
 
   _Raft_AppendEntriesRPC_result__isset __isset;
 
-  void __set_success(const bool val);
+  void __set_success(const AppendResponse& val);
 
   bool operator == (const Raft_AppendEntriesRPC_result & rhs) const
   {
@@ -282,12 +280,12 @@ typedef struct _Raft_AppendEntriesRPC_presult__isset {
 class Raft_AppendEntriesRPC_presult {
  public:
 
-  static const char* ascii_fingerprint; // = "D9D3B4421B1F23CB4063C80B484E7909";
-  static const uint8_t binary_fingerprint[16]; // = {0xD9,0xD3,0xB4,0x42,0x1B,0x1F,0x23,0xCB,0x40,0x63,0xC8,0x0B,0x48,0x4E,0x79,0x09};
+  static const char* ascii_fingerprint; // = "49E764C8B69512E0ECAFC9B0C79DBFA8";
+  static const uint8_t binary_fingerprint[16]; // = {0x49,0xE7,0x64,0xC8,0xB6,0x95,0x12,0xE0,0xEC,0xAF,0xC9,0xB0,0xC7,0x9D,0xBF,0xA8};
 
 
   virtual ~Raft_AppendEntriesRPC_presult() throw();
-  bool* success;
+  AppendResponse* success;
 
   _Raft_AppendEntriesRPC_presult__isset __isset;
 
@@ -321,12 +319,12 @@ class RaftClient : virtual public RaftIf {
   boost::shared_ptr< ::apache::thrift::protocol::TProtocol> getOutputProtocol() {
     return poprot_;
   }
-  bool RequestVoteRPC(const RequestVote& vote);
+  void RequestVoteRPC(VoteResponse& _return, const RequestVote& vote);
   void send_RequestVoteRPC(const RequestVote& vote);
-  bool recv_RequestVoteRPC();
-  bool AppendEntriesRPC(const AppendEntries& append);
+  void recv_RequestVoteRPC(VoteResponse& _return);
+  void AppendEntriesRPC(AppendResponse& _return, const AppendEntries& append);
   void send_AppendEntriesRPC(const AppendEntries& append);
-  bool recv_AppendEntriesRPC();
+  void recv_AppendEntriesRPC(AppendResponse& _return);
  protected:
   boost::shared_ptr< ::apache::thrift::protocol::TProtocol> piprot_;
   boost::shared_ptr< ::apache::thrift::protocol::TProtocol> poprot_;
@@ -377,22 +375,24 @@ class RaftMultiface : virtual public RaftIf {
     ifaces_.push_back(iface);
   }
  public:
-  bool RequestVoteRPC(const RequestVote& vote) {
+  void RequestVoteRPC(VoteResponse& _return, const RequestVote& vote) {
     size_t sz = ifaces_.size();
     size_t i = 0;
     for (; i < (sz - 1); ++i) {
-      ifaces_[i]->RequestVoteRPC(vote);
+      ifaces_[i]->RequestVoteRPC(_return, vote);
     }
-    return ifaces_[i]->RequestVoteRPC(vote);
+    ifaces_[i]->RequestVoteRPC(_return, vote);
+    return;
   }
 
-  bool AppendEntriesRPC(const AppendEntries& append) {
+  void AppendEntriesRPC(AppendResponse& _return, const AppendEntries& append) {
     size_t sz = ifaces_.size();
     size_t i = 0;
     for (; i < (sz - 1); ++i) {
-      ifaces_[i]->AppendEntriesRPC(append);
+      ifaces_[i]->AppendEntriesRPC(_return, append);
     }
-    return ifaces_[i]->AppendEntriesRPC(append);
+    ifaces_[i]->AppendEntriesRPC(_return, append);
+    return;
   }
 
 };

@@ -114,8 +114,8 @@ uint32_t Raft_RequestVoteRPC_result::read(::apache::thrift::protocol::TProtocol*
     switch (fid)
     {
       case 0:
-        if (ftype == ::apache::thrift::protocol::T_BOOL) {
-          xfer += iprot->readBool(this->success);
+        if (ftype == ::apache::thrift::protocol::T_STRUCT) {
+          xfer += this->success.read(iprot);
           this->__isset.success = true;
         } else {
           xfer += iprot->skip(ftype);
@@ -140,8 +140,8 @@ uint32_t Raft_RequestVoteRPC_result::write(::apache::thrift::protocol::TProtocol
   xfer += oprot->writeStructBegin("Raft_RequestVoteRPC_result");
 
   if (this->__isset.success) {
-    xfer += oprot->writeFieldBegin("success", ::apache::thrift::protocol::T_BOOL, 0);
-    xfer += oprot->writeBool(this->success);
+    xfer += oprot->writeFieldBegin("success", ::apache::thrift::protocol::T_STRUCT, 0);
+    xfer += this->success.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   xfer += oprot->writeFieldStop();
@@ -175,8 +175,8 @@ uint32_t Raft_RequestVoteRPC_presult::read(::apache::thrift::protocol::TProtocol
     switch (fid)
     {
       case 0:
-        if (ftype == ::apache::thrift::protocol::T_BOOL) {
-          xfer += iprot->readBool((*(this->success)));
+        if (ftype == ::apache::thrift::protocol::T_STRUCT) {
+          xfer += (*(this->success)).read(iprot);
           this->__isset.success = true;
         } else {
           xfer += iprot->skip(ftype);
@@ -300,8 +300,8 @@ uint32_t Raft_AppendEntriesRPC_result::read(::apache::thrift::protocol::TProtoco
     switch (fid)
     {
       case 0:
-        if (ftype == ::apache::thrift::protocol::T_BOOL) {
-          xfer += iprot->readBool(this->success);
+        if (ftype == ::apache::thrift::protocol::T_STRUCT) {
+          xfer += this->success.read(iprot);
           this->__isset.success = true;
         } else {
           xfer += iprot->skip(ftype);
@@ -326,8 +326,8 @@ uint32_t Raft_AppendEntriesRPC_result::write(::apache::thrift::protocol::TProtoc
   xfer += oprot->writeStructBegin("Raft_AppendEntriesRPC_result");
 
   if (this->__isset.success) {
-    xfer += oprot->writeFieldBegin("success", ::apache::thrift::protocol::T_BOOL, 0);
-    xfer += oprot->writeBool(this->success);
+    xfer += oprot->writeFieldBegin("success", ::apache::thrift::protocol::T_STRUCT, 0);
+    xfer += this->success.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   xfer += oprot->writeFieldStop();
@@ -361,8 +361,8 @@ uint32_t Raft_AppendEntriesRPC_presult::read(::apache::thrift::protocol::TProtoc
     switch (fid)
     {
       case 0:
-        if (ftype == ::apache::thrift::protocol::T_BOOL) {
-          xfer += iprot->readBool((*(this->success)));
+        if (ftype == ::apache::thrift::protocol::T_STRUCT) {
+          xfer += (*(this->success)).read(iprot);
           this->__isset.success = true;
         } else {
           xfer += iprot->skip(ftype);
@@ -380,10 +380,10 @@ uint32_t Raft_AppendEntriesRPC_presult::read(::apache::thrift::protocol::TProtoc
   return xfer;
 }
 
-bool RaftClient::RequestVoteRPC(const RequestVote& vote)
+void RaftClient::RequestVoteRPC(VoteResponse& _return, const RequestVote& vote)
 {
   send_RequestVoteRPC(vote);
-  return recv_RequestVoteRPC();
+  recv_RequestVoteRPC(_return);
 }
 
 void RaftClient::send_RequestVoteRPC(const RequestVote& vote)
@@ -400,7 +400,7 @@ void RaftClient::send_RequestVoteRPC(const RequestVote& vote)
   oprot_->getTransport()->flush();
 }
 
-bool RaftClient::recv_RequestVoteRPC()
+void RaftClient::recv_RequestVoteRPC(VoteResponse& _return)
 {
 
   int32_t rseqid = 0;
@@ -425,7 +425,6 @@ bool RaftClient::recv_RequestVoteRPC()
     iprot_->readMessageEnd();
     iprot_->getTransport()->readEnd();
   }
-  bool _return;
   Raft_RequestVoteRPC_presult result;
   result.success = &_return;
   result.read(iprot_);
@@ -433,15 +432,16 @@ bool RaftClient::recv_RequestVoteRPC()
   iprot_->getTransport()->readEnd();
 
   if (result.__isset.success) {
-    return _return;
+    // _return pointer has now been filled
+    return;
   }
   throw ::apache::thrift::TApplicationException(::apache::thrift::TApplicationException::MISSING_RESULT, "RequestVoteRPC failed: unknown result");
 }
 
-bool RaftClient::AppendEntriesRPC(const AppendEntries& append)
+void RaftClient::AppendEntriesRPC(AppendResponse& _return, const AppendEntries& append)
 {
   send_AppendEntriesRPC(append);
-  return recv_AppendEntriesRPC();
+  recv_AppendEntriesRPC(_return);
 }
 
 void RaftClient::send_AppendEntriesRPC(const AppendEntries& append)
@@ -458,7 +458,7 @@ void RaftClient::send_AppendEntriesRPC(const AppendEntries& append)
   oprot_->getTransport()->flush();
 }
 
-bool RaftClient::recv_AppendEntriesRPC()
+void RaftClient::recv_AppendEntriesRPC(AppendResponse& _return)
 {
 
   int32_t rseqid = 0;
@@ -483,7 +483,6 @@ bool RaftClient::recv_AppendEntriesRPC()
     iprot_->readMessageEnd();
     iprot_->getTransport()->readEnd();
   }
-  bool _return;
   Raft_AppendEntriesRPC_presult result;
   result.success = &_return;
   result.read(iprot_);
@@ -491,7 +490,8 @@ bool RaftClient::recv_AppendEntriesRPC()
   iprot_->getTransport()->readEnd();
 
   if (result.__isset.success) {
-    return _return;
+    // _return pointer has now been filled
+    return;
   }
   throw ::apache::thrift::TApplicationException(::apache::thrift::TApplicationException::MISSING_RESULT, "AppendEntriesRPC failed: unknown result");
 }
@@ -538,7 +538,7 @@ void RaftProcessor::process_RequestVoteRPC(int32_t seqid, ::apache::thrift::prot
 
   Raft_RequestVoteRPC_result result;
   try {
-    result.success = iface_->RequestVoteRPC(args.vote);
+    iface_->RequestVoteRPC(result.success, args.vote);
     result.__isset.success = true;
   } catch (const std::exception& e) {
     if (this->eventHandler_.get() != NULL) {
@@ -592,7 +592,7 @@ void RaftProcessor::process_AppendEntriesRPC(int32_t seqid, ::apache::thrift::pr
 
   Raft_AppendEntriesRPC_result result;
   try {
-    result.success = iface_->AppendEntriesRPC(args.append);
+    iface_->AppendEntriesRPC(result.success, args.append);
     result.__isset.success = true;
   } catch (const std::exception& e) {
     if (this->eventHandler_.get() != NULL) {

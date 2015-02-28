@@ -20,12 +20,12 @@ class RaftHandler : virtual public RaftIf {
     // Your initialization goes here
   }
 
-  bool RequestVoteRPC(const RequestVote& vote) {
+  void RequestVoteRPC(VoteResponse& _return, const RequestVote& vote) {
     // Your implementation goes here
     printf("RequestVoteRPC\n");
   }
 
-  bool AppendEntriesRPC(const AppendEntries& append) {
+  void AppendEntriesRPC(AppendResponse& _return, const AppendEntries& append) {
     // Your implementation goes here
     printf("AppendEntriesRPC\n");
   }

@@ -30,7 +30,7 @@ struct AppendResponse {
 }
 
 service Raft {
-  bool RequestVoteRPC(1:RequestVote vote);
-  bool AppendEntriesRPC(1:AppendEntries append);
+  VoteResponse RequestVoteRPC(1:RequestVote vote);
+  AppendResponse AppendEntriesRPC(1:AppendEntries append);
 }
 
