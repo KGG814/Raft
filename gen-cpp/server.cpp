@@ -24,6 +24,7 @@ using namespace ::apache::thrift::transport;
 using namespace ::apache::thrift::server;
 using boost::shared_ptr;
 
+//////////////////// Server Constants ////////////////////
 #define TIMEOUT 1000
 #define RESEND 800
 // Timeout for individual vote connection
@@ -32,71 +33,80 @@ using boost::shared_ptr;
 #define CANDIDATE_TIMEOUT 800
 // The maximum added random timeout for candidate timeouts
 #define CANDIDATE_TIMEOUT_RND 200
-
 // Iniital value in the log
 #define INITIAL 0xDEADBEEF
-
 // No one voted for
 #define NONE 0
-
 // Number of servers and majority
 // Number of servers should be odd
 // Majority should be ceil(NUM_SERVERS/2)
 #define MAJ 2
 #define NUM_SERVERS 3
 
-// Arguments
+//////////////////// Arguments ///////////////////////////
 #define ID 1
 #define SERVERS 2
 #define MIN_ARGS 3
 
-// States
+//////////////////// States //////////////////////////////
 #define FOLLOWER 0
 #define CANDIDATE 1
 #define LEADER 2
 
+//////////////////// Debug ///////////////////////////////
 // Set to true for debug output
-int debug = false;
+int debug = true;
 
+//////////////////// Functions ///////////////////////////
 // Wrapper functions for RPCs
 void requestVote (int voteID);
 void sendHeartbeat (int voteID);
-
-//Timer to determine when a follower should timeout and transition to candidate
+// Lock wrapper functions
+void incrementResponses (void);
+void resetResponses (void);
+void incrementVotes (void);
+void resetVotes (void);
+void resetTime(void);
+void incrementCurrentTerm (void);
+void setCurrentTerm (int newTerm);
+void resetCurrentTerm (void);
+void setState (int newState);
+void setVotedFor (int newVote);
+void resetVotedFor (void);
+// Handles time based Raft events (timeouts etc.)
 void heartbeatTimer (void);
 
-
-
-std::chrono::system_clock::time_point msgTime; // TODO lock
+//////////////////// Misc Variables //////////////////////
+// Used for timeouts
+std::chrono::system_clock::time_point msgTime;
+// Condition variable for vote responses
 boost::condition_variable cond;
-boost::mutex voteLock;
-boost::mutex responseLock;
-
-// Need to use a list because we cannot guarantee that a timer will finish before it is restarted.
-// However this should contain 1 element 99% of the time, and not more than 2.
-std::list<boost::thread *> timeOuts; 
+// Locks and their functions
+boost::mutex voteLock, responseLock, msgTimeLock, currentTermLock, stateLock,
+             votedForLock;
+// Boost thread object for the timer thread
+boost::thread * timerThread; 
+// Port number for this server
 int port = 0;
+// Maps IDs to port numbers
 std::map<int, int> serverID;
 
-// Raft server state
+//////////////////// Raft State //////////////////////////
 
 int id;                             // Unique ID for node
-int state;                          // What state node is in TODO lock
+int state;                          // What state node is in
 int numVotes;                       // Votes node has in current term
 int numResponse;
-
 // Persistent     
-int currentTerm;                    // Term node is in TODO lock
-int votedFor;                       // Who it voted for in current term TODO lock
+int currentTerm;                    // Term server is in
+int votedFor;                       // Who it voted for in current term
 std::vector<LogEntry> raftLog;
-
 // Volatile
 int commitIndex;
 int lastApplied;
-
 // Leader only
-int nextIndex [5];
-int matchIndex [5];
+int nextIndex [NUM_SERVERS];
+int matchIndex [NUM_SERVERS];
 
 
 class RaftHandler : virtual public RaftIf {
@@ -106,31 +116,33 @@ class RaftHandler : virtual public RaftIf {
     LogEntry initial;
     initial.term = 0;
     initial.number = INITIAL;
+    raftLog.push_back(initial);
+    resetCurrentTerm();
     // State initialization
-    currentTerm = 0;
-    state = FOLLOWER;
-    votedFor = NONE; 
+    setState(FOLLOWER); 
     commitIndex = 0;
     lastApplied = 0;
-    numVotes = 0;
-    numResponse = 0;
-    msgTime = std::chrono::system_clock::now();
-    raftLog.push_back(initial);
+    resetVotedFor();
+    resetVotes ();
+    resetResponses();
+    resetTime();    
     std::cout << "server started" << std::endl;
   }
 
   void RequestVoteRPC(VoteResponse& _return, const RequestVote& vote) {
     if (debug) {std::cout << "RequestVoteRPC" << std::endl;}
+    stateLock.lock();
     if (state == LEADER) {
+      currentTermLock.lock();
       if (vote.term > currentTerm) {
-        // TODO might be some problems here when log checking is implemented
+        // TODO Check whether their log is up to date
         currentTerm = vote.term;
         state = FOLLOWER;
         if (debug)
         {std::cout << "Leader -> Follower:  " << currentTerm << std::endl;}
-        votedFor = vote.candidateID;
+        setVotedFor(vote.candidateID);
         // Restart timeout timer
-        msgTime = std::chrono::system_clock::now();
+        resetTime();
         // Return
         _return.voteGranted = true;
         _return.term = currentTerm;
@@ -139,7 +151,9 @@ class RaftHandler : virtual public RaftIf {
         _return.voteGranted = false;
         _return.term = currentTerm;
       }
+      currentTermLock.unlock();
     } else if (state == FOLLOWER) {
+      currentTermLock.lock();
       if (vote.term < currentTerm) {  
         // Return
         _return.voteGranted = false;
@@ -147,21 +161,22 @@ class RaftHandler : virtual public RaftIf {
       } else if (vote.term > currentTerm) {
         currentTerm = vote.term;
         if (vote.lastLogIndex >= raftLog.size()-1) {
-          votedFor = vote.candidateID;      
-          msgTime = std::chrono::system_clock::now();
+          setVotedFor(vote.candidateID);      
+          resetTime();
           // Return
           _return.voteGranted = true;
           _return.term = currentTerm;
         } else {
-          votedFor = NONE;
+          resetVotedFor();
           // Return
           _return.voteGranted = false;
         } 
       } else {
+        votedForLock.lock();
         if (votedFor == NONE || votedFor == vote.candidateID) {
           if (vote.lastLogIndex >= raftLog.size()-1) {
             votedFor = vote.candidateID;
-            msgTime = std::chrono::system_clock::now();
+            resetTime();
             // Return
             _return.voteGranted = true;
             _return.term = currentTerm;
@@ -173,40 +188,48 @@ class RaftHandler : virtual public RaftIf {
           _return.voteGranted = false;
           _return.term = currentTerm;
         }
+        votedForLock.unlock();
       }
+      currentTermLock.unlock();
     } else if (state == CANDIDATE) {
+      currentTermLock.lock();
       if (vote.term > currentTerm) {
-        timeOuts.front()->interrupt();
+        timerThread->interrupt();
         state = FOLLOWER; 
+        setVotedFor(vote.candidateID);
         currentTerm = vote.term;     
         _return.voteGranted = true;
         _return.term = currentTerm;
         if (debug)
         {std::cout << "Candidate -> Follower:  " << currentTerm << std::endl;}
-      }
-      
+      } 
+      currentTermLock.unlock(); 
     }
+    stateLock.unlock();
   }
 
   void AppendEntriesRPC(AppendResponse& _return, const AppendEntries& append) {
     if (debug) {std::cout << "AppendEntriesRPC" << std::endl;}
+    stateLock.lock();
     if (state == LEADER) {
       // Something weird happens
-      msgTime = std::chrono::system_clock::now();
+      resetTime();
     } else if (state == FOLLOWER) {
       //TODO Handle checking terms etc. properly
-      
+      currentTermLock.lock();
       if (append.term > currentTerm) {
-        msgTime = std::chrono::system_clock::now();
+        resetTime();
         currentTerm = append.term;
         std::cout << "Follower: " << currentTerm << std::endl;
       } else if (append.term == currentTerm) {
-        msgTime = std::chrono::system_clock::now();
+        resetTime();
       }
+      currentTermLock.unlock();
       if (debug) {std::cout << "Heartbeat received" << std::endl;}
     } else if (state == CANDIDATE) {
       // If term received is >= currentTerm, return to follower state
-      msgTime = std::chrono::system_clock::now();
+      resetTime();
+      currentTermLock.lock();
       if (append.term >= currentTerm) {
         state = FOLLOWER;
         if (raftLog[append.prevLogIndex].term == append.prevLogTerm) {
@@ -215,17 +238,18 @@ class RaftHandler : virtual public RaftIf {
         //TODO Delete conflicting entries of new entries
         //TODO Append entries
         //TODO If leaderCommit > commitIndex, 
-        //commitIndex = min(leaderCommit, last new entry)
-        //std::cout << "Candidate -> Follower: " << currentTerm << std::endl;
+        //commitIndex = min(leaderCommit, index of last new entry)
         currentTerm = append.term;
         // TODO Make this interupt properly??
-        timeOuts.front()->interrupt();
+        timerThread->interrupt();
         state = FOLLOWER; 
         if (debug)
         {std::cout << "Candidate -> Follower:  " << currentTerm << std::endl;}
       }
+      currentTermLock.unlock();
       // If not, continue in candidate
     }
+    stateLock.unlock();
   }
 
 };
@@ -264,13 +288,14 @@ int main(int argc, char **argv) {
   shared_ptr<RaftHandler> handler(new RaftHandler());
   shared_ptr<TProcessor> processor(new RaftProcessor(handler));
   shared_ptr<TServerTransport> serverTransport(new TServerSocket(port));
-  shared_ptr<TTransportFactory> transportFactory(new TBufferedTransportFactory());
+  shared_ptr<TTransportFactory> transportFactory
+                                (new TBufferedTransportFactory());
   shared_ptr<TProtocolFactory> protocolFactory(new TBinaryProtocolFactory());
 
   // Initialise and start the timer and server
   TSimpleServer server(processor, serverTransport, transportFactory,
   protocolFactory);
-  timeOuts.push_back(new boost::thread(heartbeatTimer));
+  timerThread = new boost::thread(heartbeatTimer);
   
   server.serve();
   
@@ -294,7 +319,7 @@ void heartbeatTimer (void) {
             boost::thread heartbeatThread (sendHeartbeat, i);
           }
         }
-        msgTime = std::chrono::system_clock::now();
+        resetTime();
       }
     
       // Election timeout
@@ -302,56 +327,62 @@ void heartbeatTimer (void) {
           std::chrono::milliseconds(TIMEOUT) +
           std::chrono::milliseconds(rnd)
           && state == FOLLOWER) {    
-        // Condition variable on the number of responses received (true or false)
-        boost::unique_lock<boost::mutex> lock(responseLock);
+        
         voteSuccess = false;
         // If candidacy is reset, start from here
         std::cout << "Follower -> Candidate: " << currentTerm + 1 << std::endl;
         while (!voteSuccess) {
           // Check to see if a leader has already been selected before we 
           // continue
+          
           boost::this_thread::interruption_point();
-          state = CANDIDATE;      
+          setState(CANDIDATE);      
           srand (time(NULL)*(id+1));
           rnd = rand() % CANDIDATE_TIMEOUT_RND;
-          currentTerm++;
+          incrementCurrentTerm();
           if (debug) {std::cout << "Candidate: " << currentTerm
           << std::endl;}
           // Vote for self
-          votedFor = id;
-          numVotes = 1;
-          numResponse = 1;
+          setVotedFor(id);
+          resetVotes();
+          
+          incrementVotes();
+          // Reset response counter
+          resetResponses();
           
           // Issue request vote RPCs (new threads)
-          msgTime = std::chrono::system_clock::now();
+          resetTime();
           for (int i = 1; i <= NUM_SERVERS; i++) {
         	  if (id != i) {
               boost::thread voteThread (requestVote, i);
             }
           }
           // Wait for response
+          boost::unique_lock<boost::mutex> lock(responseLock);
           while (numVotes < MAJ) {
-            if (numResponse < NUM_SERVERS) {
+            if (numResponse < NUM_SERVERS-1) {
               cond.wait(lock);
             } else {
               // Wait a random amount of time to prevent multiple candidates
               while (std::chrono::system_clock::now() < msgTime +
                      std::chrono::milliseconds(CANDIDATE_TIMEOUT) +
                      std::chrono::milliseconds(rnd)) {};
-              msgTime = std::chrono::system_clock::now();
+              resetTime();
               // Reset candidacy
               if (debug) {std::cout << "Resetting election" << std::endl;}
               break;
             }
           }
+          // Release the lock that was locked by the unique_lock
+          responseLock.unlock();
           if (numVotes >= MAJ) {
             voteSuccess = true;
           }
         }   
         // If successful, leader
         std::cout << "Candidate -> Leader:    " << currentTerm << std::endl;
-        state = LEADER; 
-        msgTime = std::chrono::system_clock::now();
+        setState(LEADER); 
+        resetTime();
         // Send blank AppendEntries to assert dominance
         for (int i = 1; i <= NUM_SERVERS; i++) {
       	  if (id != i) {
@@ -361,7 +392,7 @@ void heartbeatTimer (void) {
       }
     } catch (boost::thread_interrupted&) {
       // If valid AppendEntries received, thread will be reset
-      msgTime = std::chrono::system_clock::now();
+      resetTime();
       continue;
     } catch (TException &tx) {
     }
@@ -396,30 +427,23 @@ void requestVote (int voteID) {
 
     if (response.voteGranted == true) {
       if (debug) {std::cout << "Vote received: " << voteID << std::endl;}
-      voteLock.lock();
-      numVotes++;     
-      voteLock.unlock();
-      responseLock.lock();
-      numResponse++;
-      responseLock.unlock();
+      incrementResponses();
+      incrementVotes();
       cond.notify_one();
     } else {
       if (debug) {std::cout << "Vote rejected: " << voteID << std::endl;}
+      currentTermLock.lock();
       if (response.term > currentTerm) {
         currentTerm = response.term;
-        votedFor = NONE;
       }
-      responseLock.lock();
-      numResponse++;
-      responseLock.unlock();
+      currentTermLock.unlock();
+      incrementResponses();
       cond.notify_one();
     }
     transport->close();
   } catch (TException &tx) {
     if(debug) {std::cout << "Connection Failed: " << voteID << std::endl;}
-    responseLock.lock();
-    numResponse++;
-    responseLock.unlock();
+    incrementResponses();
     cond.notify_one();
   } catch (boost::thread_interrupted&) {
   }
@@ -452,3 +476,73 @@ void sendHeartbeat (int voteID) {
     //std::cout << "Connection Failed" << std::endl;
   }
 }
+
+void incrementResponses (void) {
+  responseLock.lock();
+  numResponse++;
+  responseLock.unlock();
+}
+
+void resetResponses (void) {
+  responseLock.lock();
+  numResponse = 0;
+  responseLock.unlock();
+}
+
+void incrementVotes (void) {
+  voteLock.lock();
+  numVotes++; 
+  voteLock.unlock();
+}
+
+void resetVotes (void) {
+  voteLock.lock();
+  numVotes = 0;
+  voteLock.unlock();
+}
+
+void resetTime (void) {
+  msgTimeLock.lock();
+  msgTime = std::chrono::system_clock::now();
+  msgTimeLock.unlock();
+}
+
+void incrementCurrentTerm (void) {
+  currentTermLock.lock();
+  currentTerm++;
+  currentTermLock.unlock();
+  resetVotedFor();
+}
+
+void setCurrentTerm (int newTerm) {
+  currentTermLock.lock();
+  currentTerm = newTerm;
+  currentTermLock.unlock();
+  resetVotedFor();
+}
+
+void resetCurrentTerm (void) {
+  currentTermLock.lock();
+  currentTerm = 0;
+  currentTermLock.unlock();
+}
+
+void setState (int newState) {
+  stateLock.lock();
+  state = newState;
+  stateLock.unlock();
+}
+
+void setVotedFor (int newVote) {
+  votedForLock.lock();
+  votedFor = newVote;
+  votedForLock.unlock();
+}
+
+void resetVotedFor (void) {
+  votedForLock.lock();
+  votedFor = NONE;
+  votedForLock.unlock();
+}
+
+
