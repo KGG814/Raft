@@ -213,6 +213,7 @@ class RaftHandler : virtual public RaftIf {
     stateLock.unlock();
   }
 
+  // Handles receiving an AppendEntriesRPC
   void AppendEntriesRPC(AppendResponse& _return, const AppendEntries& append) {
     if (debug) {std::cout << "AppendEntriesRPC" << std::endl;}
     stateLock.lock();
@@ -220,6 +221,7 @@ class RaftHandler : virtual public RaftIf {
       // TODO Ignore for now, presumably should defer to new leader if valid
     } else if (state == CANDIDATE || state == FOLLOWER) {
       currentTermLock.lock();
+      // Term of sender must be greater than or equal to ensure a valid leader
       if (append.term >= currentTerm) {       
         currentTerm = append.term;
         _return.term = currentTerm;
@@ -228,6 +230,7 @@ class RaftHandler : virtual public RaftIf {
           resolveConflicts(append);
           _return.success = true;
           resetTime();
+          // Update commitIndex to what the local server knows is committed
           if (append.leaderCommit > commitIndex) {
             commitIndex = std::min(append.leaderCommit, lastApplied);
           }
@@ -235,6 +238,7 @@ class RaftHandler : virtual public RaftIf {
           _return.success = false;      
         }
         if (state == CANDIDATE) {
+          // Interrupt candidate elections
           timerThread->interrupt();
         }   
         if (debug) {
@@ -246,11 +250,11 @@ class RaftHandler : virtual public RaftIf {
         }
         state = FOLLOWER;
       } else {
+        // Return term so leader can calculate current term of system and update
         _return.term = currentTerm;
         _return.success = false;
       }
       currentTermLock.unlock();
-      // If not, continue in candidate
     }
     stateLock.unlock();
   }
