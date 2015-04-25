@@ -4,6 +4,7 @@
 #include <iostream>
 #include <fstream>
 #include <boost/thread/thread.hpp>
+#include <algorithm>
 
 #include "Raft.h"
 #include <thrift/protocol/TBinaryProtocol.h>
@@ -62,17 +63,19 @@ int debug = true;
 void requestVote (int voteID);
 void sendHeartbeat (int voteID);
 // Lock wrapper functions
+bool logUpToDate (RequestVote vote);
 void incrementResponses (void);
 void resetResponses (void);
 void incrementVotes (void);
 void resetVotes (void);
 void resetTime(void);
 void incrementCurrentTerm (void);
-void setCurrentTerm (int newTerm);
 void resetCurrentTerm (void);
 void setState (int newState);
 void setVotedFor (int newVote);
 void resetVotedFor (void);
+bool appendValid (const AppendEntries append);
+void resolveConflicts (const AppendEntries append);
 // Handles time based Raft events (timeouts etc.)
 void heartbeatTimer (void);
 
@@ -83,20 +86,22 @@ std::chrono::system_clock::time_point msgTime;
 boost::condition_variable cond;
 // Locks and their functions
 boost::mutex voteLock, responseLock, msgTimeLock, currentTermLock, stateLock,
-             votedForLock;
+             votedForLock, logLock;
 // Boost thread object for the timer thread
 boost::thread * timerThread; 
 // Port number for this server
 int port = 0;
 // Maps IDs to port numbers
 std::map<int, int> serverID;
-
+// Number of responses received (including a dropped connection). 
+// Required for candidate timeouts.
+int numResponse; 
 //////////////////// Raft State //////////////////////////
 
 int id;                             // Unique ID for node
 int state;                          // What state node is in
 int numVotes;                       // Votes node has in current term
-int numResponse;
+         
 // Persistent     
 int currentTerm;                    // Term server is in
 int votedFor;                       // Who it voted for in current term
@@ -134,20 +139,23 @@ class RaftHandler : virtual public RaftIf {
     stateLock.lock();
     if (state == LEADER) {
       currentTermLock.lock();
+      // Term must be greater to override a Leader
       if (vote.term > currentTerm) {
-        // TODO Check whether their log is up to date
-        currentTerm = vote.term;
-        state = FOLLOWER;
-        if (debug)
-        {std::cout << "Leader -> Follower:  " << currentTerm << std::endl;}
-        setVotedFor(vote.candidateID);
-        // Restart timeout timer
-        resetTime();
-        // Return
-        _return.voteGranted = true;
-        _return.term = currentTerm;
+        if (logUpToDate(vote)) {
+          currentTerm = vote.term;
+          state = FOLLOWER;
+          if (debug)
+          {std::cout << "Leader -> Follower:  " << currentTerm << std::endl;}
+          setVotedFor(vote.candidateID);
+          // Restart timeout timer
+          resetTime();
+          _return.voteGranted = true;
+          _return.term = currentTerm;
+        } else {
+          _return.voteGranted = false;
+          _return.term = currentTerm;
+        }
       } else {
-        // Return
         _return.voteGranted = false;
         _return.term = currentTerm;
       }
@@ -155,29 +163,26 @@ class RaftHandler : virtual public RaftIf {
     } else if (state == FOLLOWER) {
       currentTermLock.lock();
       if (vote.term < currentTerm) {  
-        // Return
         _return.voteGranted = false;
         _return.term = currentTerm;
       } else if (vote.term > currentTerm) {
         currentTerm = vote.term;
-        if (vote.lastLogIndex >= raftLog.size()-1) {
+        if (logUpToDate(vote)) {
           setVotedFor(vote.candidateID);      
           resetTime();
-          // Return
           _return.voteGranted = true;
           _return.term = currentTerm;
         } else {
           resetVotedFor();
-          // Return
           _return.voteGranted = false;
-        } 
+        }
+      // If term is the same, must check if the server already voted.
       } else {
         votedForLock.lock();
         if (votedFor == NONE || votedFor == vote.candidateID) {
-          if (vote.lastLogIndex >= raftLog.size()-1) {
+          if (logUpToDate(vote)) {
             votedFor = vote.candidateID;
             resetTime();
-            // Return
             _return.voteGranted = true;
             _return.term = currentTerm;
           } else {
@@ -193,8 +198,9 @@ class RaftHandler : virtual public RaftIf {
       currentTermLock.unlock();
     } else if (state == CANDIDATE) {
       currentTermLock.lock();
-      if (vote.term > currentTerm) {
-        timerThread->interrupt();
+      // While candidate, we can only vote for a greater term.
+      if (vote.term > currentTerm && logUpToDate(vote)) {
+        timerThread->interrupt(); // Interrupt candidate vote collection
         state = FOLLOWER; 
         setVotedFor(vote.candidateID);
         currentTerm = vote.term;     
@@ -212,39 +218,37 @@ class RaftHandler : virtual public RaftIf {
     if (debug) {std::cout << "AppendEntriesRPC" << std::endl;}
     stateLock.lock();
     if (state == LEADER) {
-      // Something weird happens
-      resetTime();
-    } else if (state == FOLLOWER) {
-      //TODO Handle checking terms etc. properly
+      // TODO Ignore for now, presumably should defer to new leader if valid
+    } else if (state == CANDIDATE || state == FOLLOWER) {
       currentTermLock.lock();
-      if (append.term > currentTerm) {
-        resetTime();
+      if (append.term >= currentTerm) {       
         currentTerm = append.term;
-        std::cout << "Follower: " << currentTerm << std::endl;
-      } else if (append.term == currentTerm) {
-        resetTime();
-      }
-      currentTermLock.unlock();
-      if (debug) {std::cout << "Heartbeat received" << std::endl;}
-    } else if (state == CANDIDATE) {
-      // If term received is >= currentTerm, return to follower state
-      resetTime();
-      currentTermLock.lock();
-      if (append.term >= currentTerm) {
-        state = FOLLOWER;
-        if (raftLog[append.prevLogIndex].term == append.prevLogTerm) {
+        _return.term = currentTerm;
+        if (appendValid(append)) {
+          resolveConflicts(append);
           _return.success = true;
+          resetTime();
+          if (append.leaderCommit > commitIndex) {
+            commitIndex = std::min(append.leaderCommit, lastApplied);
+          }
+        } else {
+          _return.success = false;      
         }
-        //TODO Delete conflicting entries of new entries
-        //TODO Append entries
-        //TODO If leaderCommit > commitIndex, 
-        //commitIndex = min(leaderCommit, index of last new entry)
-        currentTerm = append.term;
-        // TODO Make this interupt properly??
-        timerThread->interrupt();
-        state = FOLLOWER; 
-        if (debug)
-        {std::cout << "Candidate -> Follower:  " << currentTerm << std::endl;}
+        if (state == CANDIDATE) {
+          timerThread->interrupt();
+        }   
+        if (debug) {
+          if (state == FOLLOWER) {
+            std::cout << "Heartbeat received " << append.leaderID << std::endl;
+          } else if (state == CANDIDATE) {
+            std::cout << "Candidate -> Follower:  " << currentTerm << std::endl;
+            state = FOLLOWER;
+          }    
+        }
+        
+      } else {
+        _return.term = currentTerm;
+        _return.success = false;
       }
       currentTermLock.unlock();
       // If not, continue in candidate
@@ -313,6 +317,7 @@ void heartbeatTimer (void) {
       if (std::chrono::system_clock::now() >= msgTime + std::chrono::milliseconds
       (RESEND) && state == LEADER) {
         // Send blank AppendEntries to assert dominance
+        // TODO Probably need to do some log checking here
         if (debug) {std::cout << "Maintaining leader status" << std::endl;}
         for (int i = 1; i <= NUM_SERVERS; i++) {
     	    if (id != i) {
@@ -384,6 +389,7 @@ void heartbeatTimer (void) {
         setState(LEADER); 
         resetTime();
         // Send blank AppendEntries to assert dominance
+        // TODO Probably need to do some log checking here
         for (int i = 1; i <= NUM_SERVERS; i++) {
       	  if (id != i) {
             boost::thread heartbeatThread (sendHeartbeat, i);
@@ -514,12 +520,6 @@ void incrementCurrentTerm (void) {
   resetVotedFor();
 }
 
-void setCurrentTerm (int newTerm) {
-  currentTermLock.lock();
-  currentTerm = newTerm;
-  currentTermLock.unlock();
-  resetVotedFor();
-}
 
 void resetCurrentTerm (void) {
   currentTermLock.lock();
@@ -545,4 +545,55 @@ void resetVotedFor (void) {
   votedForLock.unlock();
 }
 
+bool logUpToDate (RequestVote vote) {
+  logLock.lock();
+  LogEntry last = raftLog.back();
+  if (vote.lastLogTerm > last.term) {
+    logLock.unlock();
+    return true;
+  } else if (vote.lastLogTerm == last.term) {
+    if (raftLog.size() - 1 <= vote.lastLogIndex) {
+      logLock.unlock();
+      return true;
+    } else {
+      logLock.unlock();
+      return false;
+    }
+  } else {
+    logLock.unlock();
+    return false;
+  }
+}
 
+bool appendValid (const AppendEntries append) {
+  // If the term of the sender is greater than or equal to this server's term,
+  // and if the log's match, return true
+  if (raftLog[append.prevLogIndex].term == append.prevLogTerm) {
+    return true;
+  }
+  return false;
+}
+
+void resolveConflicts (const AppendEntries append) {
+  std::vector<LogEntry>::iterator logEntry = 
+  raftLog.begin() + append.prevLogIndex + 1; 
+
+  for (std::vector<LogEntry>::const_iterator newEntry = append.entries.begin();
+       newEntry != append.entries.end(); ++newEntry, ++logEntry) {
+    if (logEntry == raftLog.end()) {
+      raftLog.push_back(*newEntry);
+    } else if (newEntry->term != logEntry->term) {
+      *logEntry = *newEntry;
+    }
+  }
+  // If the iterator for the log is not at the end, that means we have extra
+  // trailing entries that must be deleted.
+
+  // Note that this is slightly different from the definition in the raft
+  // paper, which states that entries are only deleted if there is a
+  // direct conflict. However, these entries would be later written over
+  // anyway, as they are not in the leader's log. I assume this is what the
+  // original writer's meant.
+  raftLog.erase(logEntry, raftLog.end());
+  lastApplied = raftLog.size()-1;
+}
