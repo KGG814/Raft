@@ -74,7 +74,6 @@ void resetCurrentTerm (void);
 void setState (int newState);
 void setVotedFor (int newVote);
 void resetVotedFor (void);
-bool appendValid (const AppendEntries append);
 void resolveConflicts (const AppendEntries append);
 // Handles time based Raft events (timeouts etc.)
 void heartbeatTimer (void);
@@ -224,7 +223,8 @@ class RaftHandler : virtual public RaftIf {
       if (append.term >= currentTerm) {       
         currentTerm = append.term;
         _return.term = currentTerm;
-        if (appendValid(append)) {
+        // Check for valid log up to this point
+        if (raftLog[append.prevLogIndex].term == append.prevLogTerm) {
           resolveConflicts(append);
           _return.success = true;
           resetTime();
@@ -241,11 +241,10 @@ class RaftHandler : virtual public RaftIf {
           if (state == FOLLOWER) {
             std::cout << "Heartbeat received " << append.leaderID << std::endl;
           } else if (state == CANDIDATE) {
-            std::cout << "Candidate -> Follower:  " << currentTerm << std::endl;
-            state = FOLLOWER;
+            std::cout << "Candidate -> Follower:  " << currentTerm << std::endl;  
           }    
         }
-        
+        state = FOLLOWER;
       } else {
         _return.term = currentTerm;
         _return.success = false;
@@ -565,15 +564,10 @@ bool logUpToDate (RequestVote vote) {
   }
 }
 
-bool appendValid (const AppendEntries append) {
-  // If the term of the sender is greater than or equal to this server's term,
-  // and if the log's match, return true
-  if (raftLog[append.prevLogIndex].term == append.prevLogTerm) {
-    return true;
-  }
-  return false;
-}
-
+// Implements the log update policy of Raft upon receiving a AppendEntriesRPC.
+// Essentially, the server log defers to the leader raft log, so if there
+// are any discrepancies, they are overwritten. This is checked using the term
+// of the respective log entries.
 void resolveConflicts (const AppendEntries append) {
   std::vector<LogEntry>::iterator logEntry = 
   raftLog.begin() + append.prevLogIndex + 1; 
