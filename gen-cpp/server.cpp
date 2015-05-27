@@ -34,7 +34,7 @@ using boost::shared_ptr;
 #define CANDIDATE_TIMEOUT 800
 // The maximum added random timeout for candidate timeouts
 #define CANDIDATE_TIMEOUT_RND 200
-// Iniital value in the log
+// Initial value in the log
 #define INITIAL 0xDEADBEEF
 // No one voted for
 #define NONE 0
@@ -75,6 +75,8 @@ void setState (int newState);
 void setVotedFor (int newVote);
 void resetVotedFor (void);
 void resolveConflicts (const AppendEntries append);
+void initialiseLogTest(void);
+void printLog(void);
 // Handles time based Raft events (timeouts etc.)
 void heartbeatTimer (void);
 
@@ -106,8 +108,8 @@ int currentTerm;                    // Term server is in
 int votedFor;                       // Who it voted for in current term
 std::vector<LogEntry> raftLog;
 // Volatile
-int commitIndex;
 int lastApplied;
+int commitIndex;
 // Leader only
 int nextIndex [NUM_SERVERS];
 int matchIndex [NUM_SERVERS];
@@ -235,6 +237,7 @@ class RaftHandler : virtual public RaftIf {
             commitIndex = std::min(append.leaderCommit, lastApplied);
           }
         } else {
+          
           _return.success = false;      
         }
         if (state == CANDIDATE) {
@@ -340,7 +343,7 @@ void heartbeatTimer (void) {
         // If candidacy is reset, start from here
         std::cout << "Follower -> Candidate: " << currentTerm + 1 << std::endl;
         while (!voteSuccess) {
-          // Check to see if a leader has already been selected before we 
+         // Check to see if a leader has already been selected before we 
           // continue
           
           boost::this_thread::interruption_point();
@@ -389,7 +392,10 @@ void heartbeatTimer (void) {
         }   
         // If successful, leader
         std::cout << "Candidate -> Leader:    " << currentTerm << std::endl;
-        setState(LEADER); 
+        setState(LEADER);
+	      if (raftLog.size() == 1) {
+	        initialiseLogTest();
+	      }
         resetTime();
         // Send blank AppendEntries to assert dominance
         // TODO Probably need to do some log checking here
@@ -476,9 +482,11 @@ void sendHeartbeat (int voteID) {
     AppendEntries append;
     append.term = currentTerm;
     append.leaderID = id;
-    append.prevLogIndex = raftLog.size()-1;
+    append.prevLogIndex = nextIndex[voteID]-1;
     append.prevLogTerm = raftLog[append.prevLogIndex].term;    
     append.leaderCommit = commitIndex;
+    std::vector<LogEntry> send(raftLog.begin()+nextIndex[voteID], raftLog.end());
+    append.entries = send;
     client.AppendEntriesRPC(response, append);
     transport->close();
   } catch (TException &tx) {
@@ -573,25 +581,43 @@ bool logUpToDate (RequestVote vote) {
 // are any discrepancies, they are overwritten. This is checked using the term
 // of the respective log entries.
 void resolveConflicts (const AppendEntries append) {
+  raftLog.resize(append.prevLogIndex+append.entries.size()+1);
   std::vector<LogEntry>::iterator logEntry = 
   raftLog.begin() + append.prevLogIndex + 1; 
-
   for (std::vector<LogEntry>::const_iterator newEntry = append.entries.begin();
        newEntry != append.entries.end(); ++newEntry, ++logEntry) {
-    if (logEntry == raftLog.end()) {
-      raftLog.push_back(*newEntry);
-    } else if (newEntry->term != logEntry->term) {
-      *logEntry = *newEntry;
-    }
+    *logEntry = *newEntry;
   }
-  // If the iterator for the log is not at the end, that means we have extra
-  // trailing entries that must be deleted.
-
   // Note that this is slightly different from the definition in the raft
   // paper, which states that entries are only deleted if there is a
   // direct conflict. However, these entries would be later written over
   // anyway, as they are not in the leader's log. I assume this is what the
   // original writer's meant.
-  raftLog.erase(logEntry, raftLog.end());
   lastApplied = raftLog.size()-1;
+  printLog();
+}
+
+void initialiseLogTest(void) {
+    std::cout << "Initializing test" << std::endl;
+    LogEntry second, third, fourth;
+    second.term = currentTerm;
+    third.term = currentTerm;
+    fourth.term = currentTerm;
+    second.number = 1;
+    third.number = 2;
+    fourth.number = 3;
+    raftLog.push_back(second);
+    raftLog.push_back(third);
+    raftLog.push_back(fourth);
+    lastApplied = 3; 
+    for (int i = 0; i < NUM_SERVERS; i++) {
+      nextIndex[i] = 1;
+    }
+}
+
+void printLog(void) {
+  for (std::vector<LogEntry>::const_iterator entry = raftLog.begin();
+       entry != raftLog.end(); ++entry) {
+    std::cout << entry->number << std::endl;
+  }
 }
