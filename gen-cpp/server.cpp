@@ -57,7 +57,7 @@ using boost::shared_ptr;
 
 //////////////////// Debug ///////////////////////////////
 // Set to true for debug output
-int debug = true;
+int debug = false;
 
 //////////////////// Functions ///////////////////////////
 // Wrapper functions for RPCs
@@ -80,10 +80,13 @@ void initialiseLogTest(void);
 void printLog(void);
 // Handles time based Raft events (timeouts etc.)
 void heartbeatTimer (void);
+void handlerServer (int argc, char* argv[]);
 
 
 
 //////////////////// Misc Variables //////////////////////
+RaftWindow* window;
+std::stringstream buffer;
 // Used for timeouts
 std::chrono::system_clock::time_point msgTime;
 // Condition variable for vote responses
@@ -122,11 +125,12 @@ class RaftHandler : virtual public RaftIf {
  public:
 
   RaftHandler() {
+    // Create an initial entry to allow syncing on an empty log
     LogEntry initial;
-    initial.term = 0;
+    resetCurrentTerm();
+    initial.term = currentTerm;
     initial.number = INITIAL;
     raftLog.push_back(initial);
-    resetCurrentTerm();
     // State initialization
     setState(FOLLOWER); 
     commitIndex = 0;
@@ -141,41 +145,56 @@ class RaftHandler : virtual public RaftIf {
   void RequestVoteRPC(VoteResponse& _return, const RequestVote& vote) {
     if (debug) {std::cout << "RequestVoteRPC" << std::endl;}
     stateLock.lock();
+    // Handles the case where a Leader receives a vote request from a candidate
     if (state == LEADER) {
       currentTermLock.lock();
       // Term must be greater to override a Leader
       if (vote.term > currentTerm) {
+        // If the log is up to date from the leader's perspective, and the term
+        // of the request is higher, then the leader must reliquish leadership
         if (logUpToDate(vote)) {
           currentTerm = vote.term;
           state = FOLLOWER;
           if (debug)
           {std::cout << "Leader -> Follower:  " << currentTerm << std::endl;}
           setVotedFor(vote.candidateID);
-          // Restart timeout timer
           resetTime();
           _return.voteGranted = true;
           _return.term = currentTerm;
+        // If log is not up to date, deny vote and send back term so the
+        // candidate can update accordingly
         } else {
           _return.voteGranted = false;
           _return.term = currentTerm;
         }
+      // If term is not greater, then reply false and send term for candidate
+      // to update
       } else {
         _return.voteGranted = false;
         _return.term = currentTerm;
       }
       currentTermLock.unlock();
+    // Standard case for a follower receiving a vote from a new candidate
     } else if (state == FOLLOWER) {
       currentTermLock.lock();
+      // If the request has a lower term, that means the current leader
+      // has priority
       if (vote.term < currentTerm) {  
         _return.voteGranted = false;
         _return.term = currentTerm;
+      // If the request has higher term, then we should check the logs
       } else if (vote.term > currentTerm) {
+        // Regardless of whether the log is up to date or not, we should update
+        // the term to ensure the next vote cycle is valid in case this one is
+        // invalid, since we got a higher term
         currentTerm = vote.term;
+        // If the logs are valid, then we can safely vote
         if (logUpToDate(vote)) {
           setVotedFor(vote.candidateID);      
           resetTime();
           _return.voteGranted = true;
           _return.term = currentTerm;
+        // Log isn't valid, reset voted for since we updated term
         } else {
           resetVotedFor();
           _return.voteGranted = false;
@@ -183,16 +202,21 @@ class RaftHandler : virtual public RaftIf {
       // If term is the same, must check if the server already voted.
       } else {
         votedForLock.lock();
+        // If we have not voted, or we have already voted for this candidate
+        // this round, then we can check logs
         if (votedFor == NONE || votedFor == vote.candidateID) {
+          // If logs are valid, safe to vote
           if (logUpToDate(vote)) {
             votedFor = vote.candidateID;
             resetTime();
             _return.voteGranted = true;
             _return.term = currentTerm;
+          // If logs are not valid, reject vote
           } else {
             _return.voteGranted = false;
             _return.term = currentTerm;
           }
+        // Already voted for someone else, reject
         } else {
           _return.voteGranted = false;
           _return.term = currentTerm;
@@ -268,17 +292,23 @@ class RaftHandler : virtual public RaftIf {
 };
 
 int main(int argc, char *argv[]) {
-  
-  
-  boost::thread GUIThread (GUI, 1, argv);
+  int arg = 1;
+  Glib::RefPtr<Gtk::Application> app =
+      Gtk::Application::create(arg, argv,"org.gtkmm.examples.base");
+  RaftWindow *raftwindow = new RaftWindow();
+  boost::thread serverThread (handlerServer, argc, argv);
+  window = raftwindow;
+  return app->run(*raftwindow);
+}
+
+void handlerServer (int argc, char* argv[]) {
   if (argc >= MIN_ARGS) {
     // Server Information
     id = atoi(argv[ID]);
   } else {
     std::cout << "Usage: ./server [ID] [serverfile]" << std::endl;
-    return 1;
+    return;
   }
-  
   std::string serverPort;
   std::ifstream servers (argv[SERVERS]);
   int i = 1;
@@ -294,7 +324,7 @@ int main(int argc, char *argv[]) {
   }
   if (port == 0) {
     std::cout << "ID not found" <<std::endl;
-    return 1;
+    return;
   }
   std::cout << port << std::endl;
 
@@ -312,8 +342,6 @@ int main(int argc, char *argv[]) {
   timerThread = new boost::thread(heartbeatTimer);
   
   server.serve();
-  
-  return 0;
 }
 
 void heartbeatTimer (void) {
@@ -346,6 +374,8 @@ void heartbeatTimer (void) {
         voteSuccess = false;
         // If candidacy is reset, start from here
         std::cout << "Follower -> Candidate: " << currentTerm + 1 << std::endl;
+        buffer << "Follower -> Candidate: " << currentTerm + 1 << std::endl;
+        window->setText(buffer.str());
         while (!voteSuccess) {
          // Check to see if a leader has already been selected before we 
           // continue

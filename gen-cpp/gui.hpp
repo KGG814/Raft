@@ -2,17 +2,28 @@
 #include <gtkmm.h>
 
 
-class RaftWindow : public Gtk::Window {
+class RaftWindow : public Gtk::Window
+{
+public:
+  RaftWindow();
+  virtual ~RaftWindow();
+  void setText(std::string text);
+protected:
+  
+  //Signal handlers:
+  void onButtonQuit();
+  void onButtonTransitions();
+  void onButtonDebug();
 
-  public:
-    RaftWindow();
+  //Child widgets:
+  Gtk::Box box;
 
-  protected:
-    //Signal handlers:
-    void on_button_clicked();
+  Gtk::ScrolledWindow scrolledWindow;
+  Gtk::TextView textView;
+  
+  Glib::RefPtr<Gtk::TextBuffer> transitions, debug;
 
-    //Member widgets:
-    Gtk::Button m_button;
+  Gtk::ButtonBox buttonBox;
+  Gtk::Button buttonQuit, buttonTransitions, buttonDebug;
 };
 
-RaftWindow& GUI (int argc, char* argv[]);
